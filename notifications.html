@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Notifikasi – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <h2 class="neon-text-sm">Notifikasi</h2>
+  <div class="row">
+    <button class="btn-secondary" id="btnAllRead">Tanda semua sebagai dibaca</button>
+    <button class="btn-secondary" id="btnRefresh">Segar</button>
+  </div>
+  <div id="list" style="margin-top:10px;"></div>
+</div>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "Notifikasi", backHref: "menu.html", showBack: true, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const user = KBJPS.requireAuth();
+  if(!user) return;
+
+  async function render(){
+    const listEl = document.getElementById("list");
+    const items = (await KBJPS.notifications.list(user.email)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+    if(!items.length){
+      listEl.innerHTML = "<div class='card'>Tiada notifikasi.</div>";
+      return;
+    }
+    listEl.innerHTML = items.map(n => `
+      <div class="card" style="border-color:${n.isRead ? 'rgba(0,255,150,0.12)' : 'rgba(255,220,0,0.45)'};">
+        <div style="font-weight:900;">${n.type} ${n.isRead ? '' : '<span class="badge warn">UNREAD</span>'}</div>
+        <div class="small">${n.message}</div>
+        <div class="small">Dijana: ${n.createdAt} (Waktu Malaysia)</div>
+        ${n.meta?.activityId ? `<div class="row" style="margin-top:8px;"><button class="btn-secondary" onclick="location.href='calendar.html'">Buka di Kalendar</button></div>` : ``}
+        <div class="row" style="margin-top:8px;">
+          ${n.isRead ? '' : `<button class="btn-secondary" onclick="window.__read('${n.id}')">Tanda dibaca</button>`}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  window.__read = async (id) => {
+    await KBJPS.notifications.markRead(id);
+    await render();
+  };
+
+  document.getElementById("btnAllRead").addEventListener("click", async () => {
+    await KBJPS.notifications.markAllRead(user.email);
+    await render();
+  });
+  document.getElementById("btnRefresh").addEventListener("click", render);
+
+  await render();
+});
+</script>
+
+</body>
+</html>

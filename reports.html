@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Laporan – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <h2 class="neon-text-sm">Laporan (PDF + DOCX)</h2>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="small">Tarikh mula</div>
+        <input class="input" type="date" id="from" required/>
+      </div>
+      <div>
+        <div class="small">Tarikh tamat</div>
+        <input class="input" type="date" id="to" required/>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="small">Jenis aktiviti</div>
+        <select class="input" id="type">
+          <option value="">Semua</option>
+          <option value="MESYUARAT">MESYUARAT</option>
+          <option value="KURSUS">KURSUS</option>
+          <option value="LATIHAN">LATIHAN</option>
+          <option value="OPERASI">OPERASI</option>
+          <option value="SUKAN">SUKAN</option>
+          <option value="SOSIAL">SOSIAL</option>
+          <option value="LAIN-LAIN">LAIN-LAIN</option>
+        </select>
+      </div>
+      <div id="regionWrap" style="display:none;">
+        <div class="small">Wilayah</div>
+        <select class="input" id="region"></select>
+      </div>
+      <div id="districtWrap" style="display:none;">
+        <div class="small">Daerah</div>
+        <select class="input" id="district"></select>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn-primary" id="btnPdf">Jana PDF</button>
+      <button class="btn-secondary" id="btnDocx">Jana DOCX</button>
+    </div>
+
+    <div id="status" class="status" style="display:none;"></div>
+  </div>
+
+  <div class="card">
+    <h3 class="neon-text-sm">Preview Ringkas</h3>
+    <div id="preview" class="small">Belum dijana.</div>
+  </div>
+</div>
+
+<canvas id="chartBar" width="900" height="360" style="display:none;"></canvas>
+<canvas id="chartPie" width="900" height="360" style="display:none;"></canvas>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "Laporan", backHref: "menu.html", showBack: true, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script src="js/lib/jspdf.umd.min.js"></script>
+<script src="js/lib/docx.umd.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const user = KBJPS.requireAuth();
+  if(!user) return;
+  const master = await KBJPS.getMaster();
+  const st = document.getElementById("status");
+  const prev = document.getElementById("preview");
+  const show = (msg,type) => { st.style.display="block"; KBJPS.setStatus(st,msg,type); };
+
+  // default date range: this month
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth()+1;
+  const fromStr = `${y}-${String(m).padStart(2,'0')}-01`;
+  const toStr = `${y}-${String(m).padStart(2,'0')}-${String(new Date(y,m,0).getDate()).padStart(2,'0')}`;
+  document.getElementById("from").value = fromStr;
+  document.getElementById("to").value = toStr;
+
+  // region/district filters only for SUPERADMIN
+  if(user.role === "SUPERADMIN"){
+    document.getElementById("regionWrap").style.display="block";
+    document.getElementById("districtWrap").style.display="block";
+    const regSel = document.getElementById("region");
+    const dstSel = document.getElementById("district");
+    regSel.innerHTML = `<option value="">Semua Wilayah</option>` + master.regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
+    const renderDst = () => {
+      const rid = regSel.value;
+      const ds = master.districts.filter(d=>!rid || d.regionId===rid);
+      dstSel.innerHTML = `<option value="">Semua Daerah</option>` + ds.map(d=>`<option value="${d.id}">${d.name}</option>`).join("");
+    };
+    regSel.addEventListener("change", renderDst);
+    renderDst();
+  }
+
+  function withinRange(dateStr, from, to){
+    return dateStr >= from && dateStr <= to;
+  }
+
+  function groupCount(items, keyFn){
+    const m = new Map();
+    for(const it of items){
+      const k = keyFn(it);
+      m.set(k, (m.get(k)||0)+1);
+    }
+    return [...m.entries()].sort((a,b)=>b[1]-a[1]);
+  }
+
+  async function loadLogoDataURL(){
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img,0,0);
+        resolve(c.toDataURL("image/png"));
+      };
+      img.onerror = () => resolve(null);
+      img.src = "assets/logo-jps.png";
+    });
+  }
+
+  function drawBarChart(pairs){
+    const canvas = document.getElementById("chartBar");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // background
+    ctx.fillStyle = "white";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    ctx.fillStyle = "#0a0a0a";
+    ctx.font = "22px sans-serif";
+    ctx.fillText("Bar Chart: Bilangan Aktiviti Mengikut Jenis", 20, 34);
+
+    const max = Math.max(1, ...pairs.map(p=>p[1]));
+    const left = 60, top = 70, width = canvas.width - 90, height = canvas.height - 120;
+    const barW = Math.max(30, Math.floor(width / Math.max(1,pairs.length)) - 18);
+
+    // axis
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(left, top);
+    ctx.lineTo(left, top+height);
+    ctx.lineTo(left+width, top+height);
+    ctx.stroke();
+
+    pairs.forEach((p, idx) => {
+      const x = left + 20 + idx * (barW + 18);
+      const h = Math.round((p[1]/max) * (height-20));
+      const y = top + height - h;
+      ctx.fillStyle = "rgba(0,160,90,0.75)";
+      ctx.fillRect(x, y, barW, h);
+
+      ctx.fillStyle = "#111";
+      ctx.font = "16px sans-serif";
+      ctx.fillText(String(p[1]), x + 6, y - 6);
+
+      ctx.font = "14px sans-serif";
+      const label = String(p[0]).slice(0,10);
+      ctx.fillText(label, x, top + height + 18);
+    });
+
+    return canvas.toDataURL("image/png");
+  }
+
+  function drawPieChart(pairs){
+    const canvas = document.getElementById("chartPie");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    ctx.fillStyle = "white";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    ctx.fillStyle = "#0a0a0a";
+    ctx.font = "22px sans-serif";
+    ctx.fillText("Pie Chart: Pembahagian Aktiviti Mengikut Wilayah", 20, 34);
+
+    const total = pairs.reduce((s,p)=>s+p[1],0) || 1;
+    const cx = 220, cy = 210, r = 120;
+    let start = -Math.PI/2;
+
+    pairs.forEach((p, idx) => {
+      const frac = p[1]/total;
+      const end = start + frac*2*Math.PI;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,r,start,end);
+      ctx.closePath();
+      // simple color variation
+      const g = 80 + (idx*35)%170;
+      ctx.fillStyle = `rgba(0,${g},120,0.75)`;
+      ctx.fill();
+      start = end;
+    });
+
+    // legend
+    ctx.font = "16px sans-serif";
+    pairs.slice(0,8).forEach((p, idx) => {
+      const g = 80 + (idx*35)%170;
+      ctx.fillStyle = `rgba(0,${g},120,0.75)`;
+      ctx.fillRect(430, 90 + idx*32, 18, 18);
+      ctx.fillStyle = "#111";
+      ctx.fillText(`${p[0]} (${p[1]})`, 458, 105 + idx*32);
+    });
+
+    return canvas.toDataURL("image/png");
+  }
+
+  function buildTableRows(acts){
+    return acts.map(a => ([
+      a.startDate,
+      `${a.startTime}-${a.endTime}`,
+      a.title,
+      a.type,
+      master.regions.find(r=>r.id===a.regionId)?.name || "-",
+      master.districts.find(d=>d.id===a.districtId)?.name || "-",
+      a.location,
+      a.organizerEmail
+    ]));
+  }
+
+  async function computeReport(){
+    const from = document.getElementById("from").value;
+    const to = document.getElementById("to").value;
+    const type = document.getElementById("type").value;
+
+    let regionId = "";
+    let districtId = "";
+    if(user.role === "SUPERADMIN"){
+      regionId = document.getElementById("region").value;
+      districtId = document.getElementById("district").value;
+    } else if(user.role === "ADMIN"){
+      regionId = user.regionId;
+      districtId = user.districtId;
+    }
+
+    const actsAll = await KBJPS.activities.getAllActivities();
+
+    const acts = actsAll.filter(a => {
+      if(type && a.type !== type) return false;
+      if(regionId && a.regionId !== regionId) return false;
+      if(districtId && a.districtId !== districtId) return false;
+      // overlap range: use startDate
+      return withinRange(a.startDate, from, to) || withinRange(a.endDate, from, to);
+    }).sort((a,b) => (a.startDate+a.startTime).localeCompare(b.startDate+b.startTime));
+
+    // Stats
+    const byType = groupCount(acts, a=>a.type || "LAIN-LAIN");
+    const byRegion = groupCount(acts, a=>master.regions.find(r=>r.id===a.regionId)?.name || "-");
+    const byStatus = groupCount(acts, a=>a.status || "AKTIF");
+    const participants = acts.reduce((s,a)=>s + (a.participants ? a.participants.length : 0), 0);
+
+    prev.innerHTML = `
+      <div><b>Julat:</b> ${from} → ${to}</div>
+      <div><b>Bilangan aktiviti:</b> ${acts.length}</div>
+      <div><b>Bilangan peserta (jumlah jemputan):</b> ${participants}</div>
+      <div class="small"><b>Top Jenis:</b> ${(byType[0]||["-",0])[0]} (${(byType[0]||["-",0])[1]})</div>
+    `;
+
+    return { from, to, type, regionId, districtId, acts, byType, byRegion, byStatus, participants };
+  }
+
+  async function generatePDF(){
+    show("Menjana PDF...", "info");
+    try{
+      const r = await computeReport();
+      const logo = await loadLogoDataURL();
+
+      const barImg = drawBarChart(r.byType.slice(0,7));
+      const pieImg = drawPieChart(r.byRegion.slice(0,7));
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+      const title = "Laporan Aktiviti – KB‑JPS";
+      const sub = `Dijana pada ${KBJPS.formatMY(new Date())} (Waktu Malaysia)`;
+
+      if(logo) doc.addImage(logo, "PNG", 40, 30, 60, 60);
+      doc.setFontSize(18);
+      doc.text(title, 110, 55);
+      doc.setFontSize(10);
+      doc.text(sub, 110, 75);
+
+      // summary
+      doc.setFontSize(12);
+      doc.text(`Julat: ${r.from} → ${r.to}`, 40, 115);
+      doc.text(`Bilangan aktiviti: ${r.acts.length}`, 40, 135);
+      doc.text(`Bilangan peserta (jumlah jemputan): ${r.participants}`, 40, 155);
+
+      // charts
+      doc.addPage();
+      doc.setFontSize(14);
+      doc.text("Graf Ringkas", 40, 40);
+      doc.addImage(barImg, "PNG", 40, 60, 520, 210);
+      doc.addImage(pieImg, "PNG", 40, 290, 520, 210);
+
+      // table
+      doc.addPage();
+      doc.setFontSize(14);
+      doc.text("Jadual Aktiviti", 40, 40);
+
+      const rows = buildTableRows(r.acts);
+      const headers = ["Tarikh","Masa","Tajuk","Jenis","Wilayah","Daerah","Lokasi","Penganjur"];
+      let y = 70;
+      doc.setFontSize(9);
+
+      function rowText(arr, x, y, w){
+        // simple wrap
+        let cx = x;
+        arr.forEach((t, i) => {
+          doc.text(String(t||"-").slice(0,28), cx, y);
+          cx += w[i];
+        });
+      }
+
+      const colW = [52, 60, 120, 60, 70, 70, 90, 80];
+      rowText(headers, 40, y, colW);
+      y += 14;
+      doc.line(40, y, 555, y); y += 12;
+
+      for(const row of rows){
+        if(y > 780){
+          doc.addPage();
+          y = 50;
+        }
+        rowText(row, 40, y, colW);
+        y += 14;
+      }
+
+      // footer
+      doc.setFontSize(10);
+      doc.text("Generated by KB‑JPS • Waktu Malaysia", 40, 820);
+
+      doc.save(`KBJPS_Laporan_${r.from}_to_${r.to}.pdf`);
+      show("PDF berjaya dijana & dimuat turun.", "ok");
+      // audit
+      await KBJPS.audit.addAuditLog(user.email, "GENERATE_REPORT", `Generate PDF report (${r.from}→${r.to})`);
+    }catch(e){
+      show("Gagal: " + (e.message || e), "error");
+    }
+  }
+
+  function dataURLToUint8Array(dataURL){
+    const base64 = dataURL.split(",")[1];
+    const binStr = atob(base64);
+    const arr = new Uint8Array(binStr.length);
+    for(let i=0;i<binStr.length;i++) arr[i] = binStr.charCodeAt(i);
+    return arr;
+  }
+
+  async function generateDOCX(){
+    show("Menjana DOCX...", "info");
+    try{
+      const r = await computeReport();
+      const logo = await loadLogoDataURL();
+      const barImg = drawBarChart(r.byType.slice(0,7));
+      const pieImg = drawPieChart(r.byRegion.slice(0,7));
+
+      const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, ImageRun } = window.docx;
+
+      const children = [];
+      if(logo){
+        children.push(new Paragraph({ children: [ new ImageRun({ data: dataURLToUint8Array(logo), transformation: { width: 80, height: 80 } }) ] }));
+      }
+      children.push(new Paragraph({ text: "Laporan Aktiviti – KB‑JPS", heading: HeadingLevel.HEADING_1 }));
+      children.push(new Paragraph({ text: `Dijana pada ${KBJPS.formatMY(new Date())} (Waktu Malaysia)` }));
+      children.push(new Paragraph({ text: `Julat: ${r.from} → ${r.to}` }));
+      children.push(new Paragraph({ text: `Bilangan aktiviti: ${r.acts.length}` }));
+      children.push(new Paragraph({ text: `Bilangan peserta (jumlah jemputan): ${r.participants}` }));
+
+      // charts as images
+      children.push(new Paragraph({ text: "Graf Ringkas", heading: HeadingLevel.HEADING_2 }));
+      children.push(new Paragraph({ children: [ new ImageRun({ data: dataURLToUint8Array(barImg), transformation: { width: 520, height: 210 } }) ] }));
+      children.push(new Paragraph({ children: [ new ImageRun({ data: dataURLToUint8Array(pieImg), transformation: { width: 520, height: 210 } }) ] }));
+
+      // table
+      children.push(new Paragraph({ text: "Jadual Aktiviti", heading: HeadingLevel.HEADING_2 }));
+      const headers = ["Tarikh","Masa","Tajuk","Jenis","Wilayah","Daerah","Lokasi","Penganjur"];
+
+      const rows = buildTableRows(r.acts);
+      const tableRows = [];
+      tableRows.push(new TableRow({
+        children: headers.map(h => new TableCell({ children: [ new Paragraph({ children:[new TextRun({ text:h, bold:true })] }) ] }))
+      }));
+      rows.forEach(row => {
+        tableRows.push(new TableRow({
+          children: row.map(c => new TableCell({ children: [ new Paragraph(String(c||"-")) ] }))
+        }));
+      });
+
+      children.push(new Table({ rows: tableRows, width: { size: 100, type: "pct" } }));
+      children.push(new Paragraph({ text: "Generated by KB‑JPS • Waktu Malaysia" }));
+
+      const doc = new Document({ sections: [{ children }] });
+      const blob = await Packer.toBlob(doc);
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `KBJPS_Laporan_${r.from}_to_${r.to}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(()=>URL.revokeObjectURL(link.href), 5000);
+
+      show("DOCX berjaya dijana & dimuat turun.", "ok");
+      await KBJPS.audit.addAuditLog(user.email, "GENERATE_REPORT", `Generate DOCX report (${r.from}→${r.to})`);
+    }catch(e){
+      show("Gagal: " + (e.message || e), "error");
+    }
+  }
+
+  document.getElementById("btnPdf").addEventListener("click", generatePDF);
+  document.getElementById("btnDocx").addEventListener("click", generateDOCX);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Profil – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <h2 class="neon-text-sm">Profil Saya</h2>
+
+  <div class="card">
+    <div class="small">Email (unik)</div>
+    <div id="emailBox" style="font-weight:900;"></div>
+  </div>
+
+  <form id="form" class="card">
+    <input class="input" id="name" placeholder="Nama" required/>
+    <input class="input" id="phone" placeholder="Telefon" required/>
+    <input class="input" id="password" type="password" placeholder="Kata laluan baru (biar kosong jika tidak tukar)"/>
+    <button class="btn-primary" type="submit" style="width:100%;">Simpan</button>
+    <div id="status" class="status" style="display:none;"></div>
+  </form>
+</div>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "Profil", backHref: "menu.html", showBack: true, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const user = KBJPS.requireAuth();
+  if(!user) return;
+
+  document.getElementById("emailBox").innerText = user.email;
+
+  const nameEl = document.getElementById("name");
+  const phoneEl = document.getElementById("phone");
+  nameEl.value = user.name || "";
+  phoneEl.value = user.phone || "";
+
+  const st = document.getElementById("status");
+  const show = (msg,type) => { st.style.display="block"; KBJPS.setStatus(st,msg,type); };
+
+  document.getElementById("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    show("Memproses...", "info");
+    try{
+      const updated = await KBJPS.users.updateSelf(user.email, {
+        name: nameEl.value,
+        phone: phoneEl.value,
+        password: document.getElementById("password").value
+      });
+      show("Berjaya disimpan.", "ok");
+      // refresh local user
+      setTimeout(()=>location.reload(), 350);
+    }catch(err){
+      show("Gagal: " + (err.message || err), "error");
+    }
+  });
+});
+</script>
+
+</body>
+</html>

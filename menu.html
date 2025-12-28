@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Dashboard – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <h2 class="neon-text-sm">Dashboard</h2>
+  <p class="neon-text-xs">Sistem Kalendar Bersepadu – Jabatan Perhutanan Sabah (KB‑JPS)</p>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="small">Nama</div>
+        <div id="meName" style="font-weight:800;"></div>
+      </div>
+      <div>
+        <div class="small">Role</div>
+        <div id="meRole" style="font-weight:800;"></div>
+      </div>
+      <div>
+        <div class="small">Wilayah/Daerah</div>
+        <div id="meArea" style="font-weight:800;"></div>
+      </div>
+    </div>
+    <div class="small" style="margin-top:8px;">Waktu Malaysia: <b id="nowMY"></b></div>
+  </div>
+
+  <div class="grid">
+    <button class="btn-primary" onclick="location.href='calendar.html'">📅 Kalendar</button>
+    <button class="btn-primary" onclick="location.href='notifications.html'">🔔 Notifikasi <span id="notifBadge" class="badge" style="display:none;"></span></button>
+
+    <button class="btn-secondary" onclick="location.href='gallery.html'">📎 Dokumen</button>
+    <button class="btn-secondary" onclick="location.href='reports.html'">📄 Laporan</button>
+
+    <button class="btn-secondary" onclick="location.href='profile.html'">👤 Profil</button>
+    <button class="btn-secondary" onclick="location.href='news.html'">📰 Berita</button>
+    <button class="btn-secondary" onclick="location.href='ai.html'">🤖 AI Pembantu</button>
+  </div>
+
+  <div id="adminArea" class="card" style="display:none;">
+    <h3 class="neon-text-sm">Panel Pentadbir</h3>
+    <div class="grid">
+      <button class="btn-primary" onclick="location.href='user-management.html'">👥 Pengurusan Pengguna</button>
+      <button class="btn-primary" onclick="location.href='audit.html'">📋 Audit Log</button>
+    </div>
+    <p class="small">* ADMIN hanya view pengguna kawasan sendiri. SUPERADMIN boleh approve/role/status.</p>
+  </div>
+</div>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "Dashboard", backHref: "menu.html", showBack: false, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const user = KBJPS.requireAuth();
+  if(!user) return;
+  const master = await KBJPS.getMaster();
+
+  document.getElementById("meName").innerText = user.name || "-";
+  document.getElementById("meRole").innerText = user.role || "-";
+  document.getElementById("meArea").innerText = (master.regions||[]).find(r=>r.id===user.regionId)?.name + " / " + (master.districts||[]).find(d=>d.id===user.districtId)?.name;
+
+  document.getElementById("nowMY").innerText = KBJPS.formatMY(new Date()) + " (Waktu Malaysia)";
+
+  // notifications badge
+  const all = await KBJPS.notifications.list(user.email);
+  const unread = all.filter(n=>!n.isRead).length;
+  const badge = document.getElementById("notifBadge");
+  if (unread > 0) { badge.style.display="inline-block"; badge.innerText = unread; }
+
+  if (user.role === "SUPERADMIN" || user.role === "ADMIN") {
+    document.getElementById("adminArea").style.display = "block";
+  }
+});
+
+  const apiBaseEl = document.getElementById("apiBase");
+  const apiStatus = document.getElementById("apiStatus");
+  const cur = (localStorage.getItem("kbjps_api_base")||"").trim();
+  apiBaseEl.value = cur;
+  apiStatus.textContent = cur ? ("Aktif: " + cur) : "Offline (tiada API).";
+
+  document.getElementById("saveApi").addEventListener("click", async () => {
+    const v = apiBaseEl.value.trim().replace(/\/+$/,"");
+    localStorage.setItem("kbjps_api_base", v);
+    apiStatus.textContent = "Aktif: " + v + " (reload...)";
+    location.reload();
+  });
+  document.getElementById("clearApi").addEventListener("click", () => {
+    localStorage.removeItem("kbjps_api_base");
+    apiStatus.textContent = "Offline (reload...)";
+    location.reload();
+  });
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,276 @@
+/* Umum */
+body {
+  background: #001a00;
+  font-family: 'Segoe UI', sans-serif;
+  color: #fff;
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3, p {
+  margin: 10px 0;
+  text-align: center;
+}
+
+a {
+  color: #00ff99;
+  text-decoration: none;
+}
+
+input, button, select, textarea {
+  font-family: inherit;
+  font-size: 16px;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  margin: 5px 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: 2px solid #00ff99;
+  background-color: #003300;
+  color: #ffffff;
+}
+
+/* Kotak login atau kontena utama */
+.login-box {
+  max-width: 400px;
+  margin: 40px auto;
+  padding: 20px;
+  background: rgba(0, 64, 0, 0.8);
+  border-radius: 12px;
+  box-shadow: 0 0 15px #00ff00;
+  text-align: center;
+}
+
+.glass {
+  backdrop-filter: blur(6px);
+  background-color: rgba(0, 64, 0, 0.5);
+}
+
+/* Neon text */
+.neon-text-sm {
+  font-weight: bold;
+  color: #00ff99;
+  text-shadow: 0 0 5px #00ff99, 0 0 10px #00cc66;
+}
+
+.desc-text {
+  font-size: 14px;
+  color: #b2ffb2;
+}
+
+/* Logo */
+.logo {
+  width: 80px;
+  margin: 10px auto;
+  display: block;
+}
+
+/* Butang */
+button {
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.btn-primary {
+  background: #00cc00;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #00aa00;
+}
+
+.btn-secondary {
+  background: #339933;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #267326;
+}
+
+.btn-danger {
+  background: #cc0000;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #a30000;
+}
+
+.btn-link {
+  background: transparent;
+  color: #00ff99;
+  border: none;
+  text-decoration: underline;
+  font-size: 14px;
+}
+
+.btn-link:hover {
+  color: #00cc66;
+}
+
+/* Kalendar */
+table.calendar {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+table.calendar th, table.calendar td {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 10px;
+  text-align: center;
+}
+
+.active-date {
+  background-color: #00ff9933;
+  font-weight: bold;
+  color: #fff;
+}
+
+/* Modal (untuk cipta aktiviti dan lain-lain) */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.modal.show {
+  display: flex;
+}
+
+.modal-content {
+  background: #003300;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 0 10px #00ff00;
+  color: white;
+  width: 90%;
+  max-width: 400px;
+}
+
+label {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 14px;
+  color: #aaffaa;
+}
+
+input[type="checkbox"] {
+  width: auto;
+  margin-right: 8px;
+}
+
+/* Responsive */
+@media screen and (max-width: 480px) {
+  .login-box {
+    width: 90%;
+    margin: 20px auto;
+  }
+}
+
+/* ================= KB-JPS Topbar + Layout (Android ringan) ================= */
+.topbar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(0, 20, 0, 0.92);
+  border-bottom: 1px solid rgba(0,255,150,0.25);
+  backdrop-filter: blur(6px);
+}
+.tb-left{display:flex;align-items:center;gap:10px;min-width:0;}
+.tb-logo{width:36px;height:36px;object-fit:contain;filter: drop-shadow(0 0 6px rgba(0,255,150,0.35));}
+.tb-title{min-width:0;}
+.tb-system{font-weight:700;letter-spacing:.5px;}
+.tb-page{font-size:12px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55vw;}
+.tb-right{display:flex;gap:8px;align-items:center;}
+.tb-btn{
+  border: 1px solid rgba(0,255,150,0.35);
+  background: rgba(0, 80, 40, 0.25);
+  color: #eafff5;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+.tb-btn:active{transform: scale(0.98);}
+.tb-btn.danger{border-color: rgba(255,80,80,0.55); background: rgba(140,0,0,0.22);}
+.subbar{
+  padding: 6px 12px 10px;
+  opacity: .95;
+}
+
+.page{
+  padding: 12px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+.card{
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(0,255,150,0.18);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 0 10px rgba(0,255,150,0.10);
+  margin-bottom: 12px;
+}
+.grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 520px){
+  .grid{grid-template-columns: 1fr;}
+}
+.input, select, textarea{
+  width: 100%;
+  padding: 10px 12px;
+  margin: 8px 0;
+  border-radius: 12px;
+  border: 1px solid rgba(0,255,150,0.25);
+  background: rgba(0,0,0,0.22);
+  color: white;
+  outline: none;
+}
+textarea{min-height: 80px; resize: vertical;}
+.row{display:flex;gap:10px;flex-wrap:wrap;}
+.row > *{flex:1 1 160px;}
+.status{margin-top:8px; padding:8px 10px;border-radius:12px;border:1px solid rgba(0,255,150,0.25);background:rgba(0,0,0,0.20);}
+.status.error{border-color: rgba(255,80,80,0.55); background: rgba(120,0,0,0.18);}
+.status.ok{border-color: rgba(80,255,120,0.55); background: rgba(0,120,40,0.18);}
+.footer{padding:18px 10px 24px; text-align:center; opacity:0.75; font-size:12px;}
+.table{
+  width:100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+.table th,.table td{
+  border-bottom: 1px solid rgba(0,255,150,0.15);
+  padding: 10px 8px;
+  text-align:left;
+  font-size: 13px;
+}
+.badge{
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:999px;
+  border:1px solid rgba(0,255,150,0.25);
+  font-size: 12px;
+  opacity:.95;
+}
+.badge.warn{border-color: rgba(255,220,0,0.55);}
+.badge.danger{border-color: rgba(255,80,80,0.55);}
+.badge.ok{border-color: rgba(80,255,120,0.55);}
+.small{font-size:12px; opacity:.9;}

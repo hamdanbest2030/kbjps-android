@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Audit Log – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <h2 class="neon-text-sm">Audit Log</h2>
+  <p class="small">Semua tarikh & masa dipaparkan dalam Waktu Malaysia.</p>
+
+  <input class="input" id="q" placeholder="Cari (action / email / details)"/>
+  <div class="row">
+    <button class="btn-secondary" id="btnRefresh">Segar</button>
+  </div>
+
+  <div id="list" style="margin-top:10px;"></div>
+</div>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "Audit Log", backHref: "menu.html", showBack: true, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const user = KBJPS.requireAuth();
+  if(!user) return;
+  if(!(user.role==="SUPERADMIN" || user.role==="ADMIN")){
+    location.href="menu.html"; return;
+  }
+
+  async function render(){
+    const q = (document.getElementById("q").value||"").toLowerCase().trim();
+    const listEl = document.getElementById("list");
+    const logs = (await KBJPS.audit.list()).sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||""));
+    const items = logs.filter(l => !q || (l.action||"").toLowerCase().includes(q) || (l.userEmail||"").toLowerCase().includes(q) || (l.details||"").toLowerCase().includes(q));
+
+    if(!items.length){
+      listEl.innerHTML = "<div class='card'>Tiada audit log.</div>";
+      return;
+    }
+    listEl.innerHTML = items.slice(0,300).map(l => `
+      <div class="card">
+        <div style="font-weight:900;">[${l.createdAt}] ${l.action}</div>
+        <div class="small">User: ${l.userEmail} • IP: ${l.ipAddress}</div>
+        <div class="small">${l.details || "-"}</div>
+      </div>
+    `).join("");
+  }
+
+  document.getElementById("btnRefresh").addEventListener("click", render);
+  document.getElementById("q").addEventListener("input", render);
+  await render();
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>AI Pembantu – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  <style>
+    .chatWrap{display:flex;flex-direction:column;gap:10px;}
+    .chatBox{
+      height: 55vh;
+      overflow:auto;
+      padding:10px;
+      border-radius:14px;
+      border:1px solid rgba(0,255,150,0.22);
+      background: rgba(0, 25, 0, 0.45);
+    }
+    .msg{padding:10px 12px;border-radius:14px;margin:8px 0;max-width:92%;}
+    .me{margin-left:auto;background: rgba(0,255,150,0.12);border:1px solid rgba(0,255,150,0.25);}
+    .bot{margin-right:auto;background: rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);}
+    .meta{font-size:12px;opacity:.85;margin-top:4px;}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .smallBtn{padding:10px;border-radius:10px;border:1px solid rgba(0,255,150,0.25);background: rgba(0,80,40,0.18);color:#eafff5;font-weight:800;}
+    .smallBtn:active{transform:scale(.98);}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid rgba(0,255,150,0.22);font-size:12px;opacity:.95;}
+  </style>
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+
+<div class="page">
+  <div class="card glass">
+    <h2 class="neon-text-sm">🤖 AI Pembantu KB‑JPS</h2>
+    <p class="small">OFFLINE: arahan ringkas + ringkasan aktiviti. ONLINE: panggil endpoint AI (proxy server) jika ada internet.</p>
+
+    <div class="card">
+      <div class="row">
+        <div class="pill">Mode: <b id="modeLabel">OFFLINE</b></div>
+        <div class="pill">Status Internet: <b id="netLabel">-</b></div>
+      </div>
+
+      <div class="row2" style="margin-top:10px;">
+        <button class="btn-secondary" id="btnMode">Tukar Mode</button>
+        <button class="btn-secondary" id="btnHelp">Help</button>
+      </div>
+
+      <div id="onlineSettings" class="card" style="display:none;margin-top:10px;">
+        <div class="small">Endpoint AI (POST JSON). Jangan letak API key dalam GitHub. Guna server proxy.</div>
+        <input id="endpoint" placeholder="https://server-anda/api/ai"/>
+        <button class="btn-primary" id="btnSaveEndpoint">Simpan Endpoint</button>
+        <div class="small" style="opacity:.9;">Format request dihantar: { prompt, app, timeMY, user }</div>
+      </div>
+    </div>
+
+    <div class="chatWrap">
+      <div id="chat" class="chatBox"></div>
+
+      <textarea id="prompt" rows="2" placeholder="Contoh: aktiviti hari ini"></textarea>
+      <div class="row2">
+        <button class="btn-primary" id="btnSend">Hantar</button>
+        <button class="btn-danger" id="btnClear">Padam Chat</button>
+      </div>
+
+      <div class="card">
+        <div class="small" style="margin-bottom:6px;">Aksi pantas:</div>
+        <div class="grid">
+          <button class="smallBtn" data-q="buka kalendar">📅 Kalendar</button>
+          <button class="smallBtn" data-q="aktiviti hari ini">🗓️ Hari Ini</button>
+          <button class="smallBtn" data-q="aktiviti bulan ini">🗓️ Bulan Ini</button>
+          <button class="smallBtn" data-q="buka notifikasi">🔔 Notifikasi</button>
+          <button class="smallBtn" data-q="buka laporan">📄 Laporan</button>
+          <button class="smallBtn" data-q="buka audit">📋 Audit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="kbjpsFooter"></div>
+
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "AI Pembantu", backHref: "menu.html", showBack: true, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+const LS_CHAT = "kbjps_ai_chat_v1";
+
+function escapeHtml(s){
+  return String(s||"").replace(/[&<>"']/g, (m)=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
+}
+
+function loadChat(){
+  try { return JSON.parse(localStorage.getItem(LS_CHAT)||"[]") || []; } catch { return []; }
+}
+function saveChat(arr){ localStorage.setItem(LS_CHAT, JSON.stringify(arr||[])); }
+
+function renderChat(){
+  const el = document.getElementById("chat");
+  const items = loadChat();
+  el.innerHTML = items.map(m => {
+    const cls = m.who === "me" ? "msg me" : "msg bot";
+    return `<div class="${cls}">
+      <div>${escapeHtml(m.text).replace(/\n/g,"<br>")}</div>
+      <div class="meta">${escapeHtml(m.time||"")}</div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+function setPills(){
+  const mode = (KBJPS.ai.getMode() || "offline").toUpperCase();
+  document.getElementById("modeLabel").innerText = mode;
+  document.getElementById("netLabel").innerText = (KBJPS.ai.isOnline() ? "ONLINE" : "OFFLINE");
+  const showSettings = (KBJPS.ai.getMode() || "offline") === "online";
+  document.getElementById("onlineSettings").style.display = showSettings ? "block" : "none";
+  document.getElementById("endpoint").value = KBJPS.ai.getEndpoint() || "";
+}
+
+async function sendPrompt(q){
+  const user = KBJPS.requireAuth(); if(!user) return;
+  const prompt = String(q || document.getElementById("prompt").value || "").trim();
+  if(!prompt) return;
+
+  const items = loadChat();
+  items.push({ who:"me", text: prompt, time: KBJPS.formatMY(new Date()) + " (MY)" });
+  saveChat(items);
+  renderChat();
+  document.getElementById("prompt").value = "";
+
+  // assistant
+  const res = await KBJPS.ai.chat(user.email, prompt);
+  const items2 = loadChat();
+  items2.push({ who:"bot", text: res.text || "", time: KBJPS.formatMY(new Date()) + " (MY)" });
+  saveChat(items2);
+  renderChat();
+
+  // run action if any
+  if (res.type === "action" && typeof res.action === "function") {
+    setTimeout(() => res.action(), 450);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderChat();
+  setPills();
+
+  document.getElementById("btnSend").addEventListener("click", () => sendPrompt());
+  document.getElementById("btnClear").addEventListener("click", () => { localStorage.removeItem(LS_CHAT); renderChat(); });
+
+  document.getElementById("btnHelp").addEventListener("click", () => sendPrompt("help"));
+
+  document.getElementById("btnMode").addEventListener("click", () => {
+    const cur = KBJPS.ai.getMode() || "offline";
+    KBJPS.ai.setMode(cur === "offline" ? "online" : "offline");
+    setPills();
+  });
+
+  document.getElementById("btnSaveEndpoint").addEventListener("click", () => {
+    KBJPS.ai.setEndpoint(document.getElementById("endpoint").value);
+    setPills();
+    alert("Endpoint disimpan.");
+  });
+
+  document.querySelectorAll("[data-q]").forEach(btn => {
+    btn.addEventListener("click", () => sendPrompt(btn.getAttribute("data-q")));
+  });
+
+  window.addEventListener("online", setPills);
+  window.addEventListener("offline", setPills);
+});
+</script>
+
+</body>
+</html>

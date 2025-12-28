@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Pengurusan Pengguna – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <h2 class="neon-text-sm">Pengurusan Pengguna</h2>
+  <p class="small">
+    SUPERADMIN: approve/deactivate, tukar role, padam pengguna (kecuali seed).<br/>
+    ADMIN: view pengguna dalam wilayah sendiri.
+  </p>
+
+  <input class="input" id="q" placeholder="Cari nama/email..."/>
+  <div class="row">
+    <button class="btn-secondary" id="btnRefresh">Segar</button>
+  </div>
+
+  <div id="list" style="margin-top:10px;"></div>
+</div>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "Pengguna", backHref: "menu.html", showBack: true, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const me = KBJPS.requireAuth();
+  if(!me) return;
+  if(!(me.role==="SUPERADMIN" || me.role==="ADMIN")){
+    location.href="menu.html"; return;
+  }
+
+  const master = await KBJPS.getMaster();
+
+  async function render(){
+    const q = (document.getElementById("q").value||"").toLowerCase().trim();
+    const all = await KBJPS.users.getAllUsers();
+    let users = all;
+
+    if(me.role==="ADMIN"){
+      users = users.filter(u=>u.regionId===me.regionId); // view region sendiri
+    }
+
+    users = users.filter(u => !q || (u.name||"").toLowerCase().includes(q) || (u.email||"").toLowerCase().includes(q))
+      .sort((a,b)=> (a.status||"").localeCompare(b.status||"") || (a.role||"").localeCompare(b.role||"") || (a.createdAt||"").localeCompare(b.createdAt||""));
+
+    const list = document.getElementById("list");
+    if(!users.length){
+      list.innerHTML = "<div class='card'>Tiada pengguna.</div>";
+      return;
+    }
+
+    list.innerHTML = users.map(u => {
+      const area = (master.regions||[]).find(r=>r.id===u.regionId)?.name + " / " + (master.districts||[]).find(d=>d.id===u.districtId)?.name;
+      const stBadge = u.status==="PENDING" ? "badge warn" : (u.status==="ACTIVE" ? "badge ok" : "badge danger");
+      const canEdit = (me.role==="SUPERADMIN") && !(u.isSeed && u.role==="SUPERADMIN");
+      return `
+        <div class="card">
+          <div style="font-weight:900;">${u.name} <span class="${stBadge}">${u.status}</span></div>
+          <div class="small">${u.email} • ${u.phone || '-'}</div>
+          <div class="small">Role: <b>${u.role}</b> • ${area || '-'}</div>
+          <div class="small">Dicipta: ${u.createdAt || '-'}</div>
+
+          ${me.role==="SUPERADMIN" ? `
+            <div class="row" style="margin-top:8px;">
+              <button class="btn-secondary" onclick="window.__status('${u.email}','${u.status==='ACTIVE'?'INACTIVE':'ACTIVE'}')" ${!canEdit?'disabled':''}>
+                ${u.status==='ACTIVE'?'Nyahaktif':'Aktifkan'}
+              </button>
+              <select class="input" style="flex:1 1 160px;" onchange="window.__role('${u.email}', this.value)" ${!canEdit?'disabled':''}>
+                <option value="">Tukar role...</option>
+                <option value="ADMIN">ADMIN</option>
+                <option value="STAFF">STAFF</option>
+              </select>
+              <button class="btn-secondary" onclick="window.__del('${u.email}')" ${!canEdit?'disabled':''}>Padam</button>
+            </div>
+          ` : ``}
+        </div>
+      `;
+    }).join("");
+  }
+
+  window.__status = async (email, status) => {
+    try{
+      await KBJPS.users.setUserStatus(me, email, status);
+      await render();
+    }catch(e){
+      alert(e.message || e);
+    }
+  };
+
+  window.__role = async (email, role) => {
+    if(!role) return;
+    try{
+      await KBJPS.users.setUserRole(me, email, role);
+      await render();
+    }catch(e){
+      alert(e.message || e);
+    }
+  };
+
+  window.__del = async (email) => {
+    if(!confirm("Padam pengguna ini?")) return;
+    try{
+      await KBJPS.users.deleteUser(me, email);
+      await render();
+    }catch(e){
+      alert(e.message || e);
+    }
+  };
+
+  document.getElementById("btnRefresh").addEventListener("click", render);
+  document.getElementById("q").addEventListener("input", render);
+  await render();
+});
+</script>
+
+</body>
+</html>

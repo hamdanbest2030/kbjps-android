@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Dokumen – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <h2 class="neon-text-sm">Dokumen (GridFS Lokal)</h2>
+  <p class="small">Semua fail disimpan secara REAL dalam IndexedDB telefon (Blob). Untuk muat naik, buka detail aktiviti di Kalendar.</p>
+
+  <input class="input" id="q" placeholder="Cari tajuk / uploader / jenis..."/>
+  <div class="row">
+    <button class="btn-secondary" id="btnRefresh">Segar</button>
+  </div>
+
+  <div id="list" style="margin-top:10px;"></div>
+</div>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "Dokumen", backHref: "menu.html", showBack: true, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const user = KBJPS.requireAuth();
+  if(!user) return;
+
+  async function render(){
+    const q = (document.getElementById("q").value || "").toLowerCase().trim();
+    const listEl = document.getElementById("list");
+    const all = (await KBJPS.attachments.listAttachmentsForUser(user))
+      .sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+
+    const items = all.filter(a => !q || (a.title||"").toLowerCase().includes(q) || (a.uploadedBy||"").toLowerCase().includes(q) || (a.fileType||"").toLowerCase().includes(q));
+
+    if(!items.length){
+      listEl.innerHTML = "<div class='card'>Tiada dokumen.</div>";
+      return;
+    }
+
+    listEl.innerHTML = items.map(a => `
+      <div class="card">
+        <div style="font-weight:900;">${a.title}</div>
+        <div class="small">${a.fileType} • ${a.createdAt} • oleh ${a.uploadedBy}</div>
+        <div class="small">Kategori: ${a.category} • Aktiviti: ${a.activityId}</div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn-secondary" onclick="window.__dl('${a.id}')">Muat Turun</button>
+          ${(user.role!=='STAFF') ? `<button class="btn-secondary" onclick="window.__del('${a.id}')">Padam</button>` : ``}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  window.__dl = async (id) => {
+    const a = await KBJPS.attachments.getAttachmentById(id);
+    if(!a) return;
+    const url = URL.createObjectURL(a.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = a.title + "." + a.fileType.toLowerCase();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  };
+
+  window.__del = async (id) => {
+    if(!confirm("Padam dokumen ini?")) return;
+    try{
+      await KBJPS.attachments.deleteAttachment(user, id);
+      await render();
+    }catch(e){
+      alert(e.message || e);
+    }
+  };
+
+  document.getElementById("btnRefresh").addEventListener("click", render);
+  document.getElementById("q").addEventListener("input", render);
+
+  await render();
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Kalendar – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <h2 class="neon-text-sm">Kalendar Aktiviti</h2>
+
+  <div class="card">
+    <div class="row" style="align-items:center;">
+      <button class="btn-secondary" id="prevYear">« Tahun</button>
+      <button class="btn-secondary" id="prevMonth">‹ Bulan</button>
+      <div style="flex:2 1 220px; text-align:center; font-weight:900;" id="monthLabel"></div>
+      <button class="btn-secondary" id="nextMonth">Bulan ›</button>
+      <button class="btn-secondary" id="nextYear">Tahun »</button>
+    </div>
+
+    <table class="table" style="margin-top:10px;">
+      <thead>
+        <tr>
+          <th>Ahd</th><th>Isn</th><th>Sel</th><th>Rab</th><th>Kha</th><th>Jum</th><th>Sab</th>
+        </tr>
+      </thead>
+      <tbody id="calBody"></tbody>
+    </table>
+
+    <div class="row" style="margin-top:10px;">
+      <button class="btn-primary" id="btnCreate" style="display:none;">➕ Cipta Aktiviti</button>
+      <button class="btn-secondary" id="btnToday">Hari Ini</button>
+      <button class="btn-secondary" id="btnRefresh">Segar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="neon-text-sm">📋 Aktiviti Bulan Ini</h3>
+    <div id="monthList" class="small"></div>
+  </div>
+
+  <div class="card">
+    <h3 class="neon-text-sm">📩 Jemputan Saya</h3>
+    <div id="myInvites" class="small"></div>
+  </div>
+</div>
+
+<!-- Modal: Create -->
+<div id="createModal" class="modal">
+  <div class="modal-content">
+    <h3 class="neon-text-sm">🆕 Cipta Aktiviti</h3>
+    <form id="createForm">
+      <input class="input" id="aTitle" placeholder="Tajuk" required/>
+      <select class="input" id="aType">
+        <option value="MESYUARAT">MESYUARAT</option>
+        <option value="KURSUS">KURSUS</option>
+        <option value="LATIHAN">LATIHAN</option>
+        <option value="OPERASI">OPERASI</option>
+        <option value="SUKAN">SUKAN</option>
+        <option value="SOSIAL">SOSIAL</option>
+        <option value="LAIN-LAIN">LAIN-LAIN</option>
+      </select>
+
+      <div class="row">
+        <div><div class="small">Tarikh mula</div><input class="input" type="date" id="aStartDate" required/></div>
+        <div><div class="small">Tarikh tamat</div><input class="input" type="date" id="aEndDate" required/></div>
+      </div>
+
+      <div class="row">
+        <div><div class="small">Masa mula</div><input class="input" type="time" id="aStartTime" required/></div>
+        <div><div class="small">Masa tamat</div><input class="input" type="time" id="aEndTime" required/></div>
+      </div>
+
+      <input class="input" id="aLocation" placeholder="Lokasi" required/>
+
+      <div id="areaPick" class="row">
+        <div>
+          <div class="small">Wilayah</div>
+          <select class="input" id="aRegion"></select>
+        </div>
+        <div>
+          <div class="small">Daerah</div>
+          <select class="input" id="aDistrict"></select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="font-weight:800;">Jemputan Peserta</div>
+        <label class="small"><input type="radio" name="inviteMode" value="ALL" checked/> ALL SABAH (semua user ACTIVE)</label><br/>
+        <label class="small"><input type="radio" name="inviteMode" value="SELECTED"/> SELECTED USERS</label>
+
+        <div id="selectedWrap" style="display:none; margin-top:10px;">
+          <input class="input" id="userSearch" placeholder="Cari nama/email..."/>
+          <div id="userList" style="max-height:220px; overflow:auto; border:1px solid rgba(0,255,150,0.18); border-radius:12px; padding:8px;"></div>
+        </div>
+      </div>
+
+      <button class="btn-primary" type="submit" style="width:100%;">Simpan & Hantar Jemputan</button>
+      <button class="btn-link" type="button" id="btnCloseCreate" style="width:100%; margin-top:8px;">Tutup</button>
+      <div id="cStatus" class="status" style="display:none;"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Detail -->
+<div id="detailModal" class="modal">
+  <div class="modal-content" id="detailContent"></div>
+</div>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "Kalendar", backHref: "menu.html", showBack: true, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+(() => {
+  let user, master;
+  let current = new Date();
+
+  const months = ["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
+
+  const el = (id) => document.getElementById(id);
+
+  function openModal(id){ el(id).classList.add("show"); }
+  function closeModal(id){ el(id).classList.remove("show"); }
+
+  function isSameDayMY(d1, d2){
+    return d1.getFullYear()===d2.getFullYear() && d1.getMonth()===d2.getMonth() && d1.getDate()===d2.getDate();
+  }
+
+  async function renderCalendar(){
+    const year = current.getFullYear();
+    const month = current.getMonth();
+    el("monthLabel").innerText = months[month] + " " + year;
+
+    const firstDay = new Date(year, month, 1).getDay(); // 0 Sunday
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+
+    const body = el("calBody");
+    body.innerHTML = "";
+
+    let row = document.createElement("tr");
+    for(let i=0;i<firstDay;i++){
+      const td=document.createElement("td");
+      td.innerHTML="&nbsp;";
+      row.appendChild(td);
+    }
+
+    const acts = await KBJPS.activities.getActivitiesForUser(user);
+
+    for(let d=1; d<=daysInMonth; d++){
+      if(row.children.length===7){
+        body.appendChild(row);
+        row=document.createElement("tr");
+      }
+
+      const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      const td=document.createElement("td");
+      td.style.cursor="pointer";
+
+      const hasAct = acts.some(a => dateStr >= a.startDate && dateStr <= a.endDate);
+      const isToday = isSameDayMY(new Date(), new Date(year, month, d));
+
+      td.innerHTML = `<div class="small" style="font-weight:900; opacity:${hasAct?1:0.7};">${d}</div>`;
+      if (hasAct) td.classList.add("active-date");
+      if (isToday) td.classList.add("today");
+
+      td.addEventListener("click", () => openDateDetail(dateStr));
+      row.appendChild(td);
+    }
+
+    while(row.children.length<7){
+      const td=document.createElement("td");
+      td.innerHTML="&nbsp;";
+      row.appendChild(td);
+    }
+    body.appendChild(row);
+
+    await renderMonthList();
+    await renderMyInvites();
+  }
+
+  async function renderMonthList(){
+    const year = current.getFullYear();
+    const month = current.getMonth();
+    const acts = await KBJPS.activities.getActivitiesForUser(user);
+
+    const list = acts
+      .filter(a => {
+        const sd = new Date(a.startDate);
+        return sd.getFullYear()===year && sd.getMonth()===month;
+      })
+      .sort((a,b) => (a.startDate+a.startTime).localeCompare(b.startDate+b.startTime));
+
+    if(!list.length){
+      el("monthList").innerHTML = "<div class='small'>Tiada aktiviti bulan ini.</div>";
+      return;
+    }
+
+    el("monthList").innerHTML = list.map(a => `
+      <div class="card" style="margin:8px 0;">
+        <div style="font-weight:900;">${a.title}</div>
+        <div class="small">${a.startDate} ${a.startTime} → ${a.endDate} ${a.endTime} • ${a.location}</div>
+        <div class="small">Wilayah: ${master.regions.find(r=>r.id===a.regionId)?.name || '-'} | Daerah: ${master.districts.find(d=>d.id===a.districtId)?.name || '-'}</div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn-secondary" onclick="window.__openAct('${a.id}')">Buka</button>
+          ${["SUPERADMIN","ADMIN"].includes(user.role) ? `<button class="btn-secondary" onclick="window.__cancelAct('${a.id}')">Batal</button>` : ``}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  async function renderMyInvites(){
+    const invs = await KBJPS.activities.getInvitations();
+    const mine = invs.filter(i => i.invitedEmail === user.email).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+    if(!mine.length){
+      el("myInvites").innerHTML = "<div class='small'>Tiada jemputan.</div>";
+      return;
+    }
+    const acts = await KBJPS.activities.getAllActivities();
+    const byId = Object.fromEntries(acts.map(a=>[a.id,a]));
+    el("myInvites").innerHTML = mine.slice(0,20).map(i => {
+      const a = byId[i.activityId];
+      if(!a) return "";
+      const badge = i.status==="PENDING" ? "badge warn" : (i.status==="ACCEPTED" ? "badge ok" : "badge danger");
+      return `
+        <div class="card" style="margin:8px 0;">
+          <div style="font-weight:900;">${a.title}</div>
+          <div class="small">${a.startDate} ${a.startTime} • ${a.location}</div>
+          <div class="small"><span class="${badge}">${i.status}</span></div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn-secondary" onclick="window.__openAct('${a.id}')">Buka</button>
+            ${user.role==="STAFF" && i.status==="PENDING" ? `
+              <button class="btn-primary" onclick="window.__acceptInv('${a.id}')">Terima</button>
+              <button class="btn-secondary" onclick="window.__rejectInv('${a.id}')">Tolak</button>
+            `: ``}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  async function openDateDetail(dateStr){
+    const acts = await KBJPS.activities.getActivitiesForUser(user);
+    const list = acts.filter(a => dateStr >= a.startDate && dateStr <= a.endDate);
+    let html = `<h3 class="neon-text-sm">Aktiviti pada ${dateStr}</h3>`;
+    if(!list.length){
+      html += `<p class="small">Tiada aktiviti.</p>`;
+    } else {
+      html += list.map(a => `
+        <div class="card">
+          <div style="font-weight:900;">${a.title}</div>
+          <div class="small">${a.startDate} ${a.startTime} → ${a.endDate} ${a.endTime}</div>
+          <div class="small">${a.location}</div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn-secondary" onclick="window.__openAct('${a.id}')">Buka</button>
+          </div>
+        </div>
+      `).join("");
+    }
+    html += `<button class="btn-link" style="width:100%;" onclick="document.getElementById('detailModal').classList.remove('show')">Tutup</button>`;
+    el("detailContent").innerHTML = html;
+    openModal("detailModal");
+  }
+
+  async function openActivityDetail(activityId){
+    const all = await KBJPS.activities.getAllActivities();
+    const act = all.find(a=>a.id===activityId);
+    if(!act) return;
+
+    const regionName = master.regions.find(r=>r.id===act.regionId)?.name || "-";
+    const districtName = master.districts.find(d=>d.id===act.districtId)?.name || "-";
+    const inv = await KBJPS.activities.getInvitationForUser(activityId, user.email);
+
+    const canAdminControl = (user.role==="SUPERADMIN") || (user.role==="ADMIN" && act.regionId===user.regionId && act.districtId===user.districtId);
+
+    let html = `
+      <h3 class="neon-text-sm">${act.title}</h3>
+      <div class="small">${act.type} • <span class="badge ${act.status==='DIBATALKAN'?'danger':'ok'}">${act.status}</span></div>
+      <div class="small">Tarikh/Masa: ${act.startDate} ${act.startTime} → ${act.endDate} ${act.endTime}</div>
+      <div class="small">Lokasi: ${act.location}</div>
+      <div class="small">Wilayah/Daerah: ${regionName} / ${districtName}</div>
+      <div class="small">Penganjur: ${act.organizerEmail}</div>
+      ${act.status==='DIBATALKAN' ? `<div class="status error">Sebab Batal: ${act.cancelReason || '-'}</div>` : ``}
+      <div class="card">
+        <div style="font-weight:800;">Status Jemputan Saya</div>
+        <div class="small">${inv ? `<span class="badge ${inv.status==='PENDING'?'warn':(inv.status==='ACCEPTED'?'ok':'danger')}">${inv.status}</span>` : `Tiada`}</div>
+        ${inv && inv.status==="REJECTED" && inv.reasonReject ? `<div class="small">Sebab: ${inv.reasonReject}</div>` : ``}
+      </div>
+    `;
+
+    // Actions
+    if (user.role==="STAFF" && inv && inv.status==="PENDING" && act.status==="AKTIF") {
+      html += `
+        <div class="row">
+          <button class="btn-primary" onclick="window.__acceptInv('${act.id}')">Terima</button>
+          <button class="btn-secondary" onclick="window.__rejectInv('${act.id}')">Tolak</button>
+        </div>
+      `;
+    }
+
+    if (canAdminControl && act.status==="AKTIF") {
+      html += `
+        <div class="card">
+          <div style="font-weight:800;">Tindakan Admin</div>
+          <button class="tb-btn danger" style="width:100%;" onclick="window.__cancelAct('${act.id}')">Batal Aktiviti</button>
+        </div>
+      `;
+    }
+
+    // Attachments
+    html += `<div class="card"><div style="font-weight:800;">📎 Dokumen Aktiviti</div><div id="attList" class="small">Memuat...</div></div>`;
+
+    // Upload control
+    const canUpload = (user.role==="SUPERADMIN") || (user.role==="ADMIN" && canAdminControl) || (user.role==="STAFF" && inv && inv.status==="ACCEPTED");
+    if (canUpload) {
+      html += `
+        <div class="card">
+          <div style="font-weight:800;">Muat Naik Dokumen</div>
+          <input class="input" id="attTitle" placeholder="Tajuk dokumen (optional)"/>
+          <textarea class="input" id="attNotes" placeholder="Catatan (optional)"></textarea>
+          <select class="input" id="attCat">
+            <option value="ACTIVITY_ATTACHMENT">ACTIVITY_ATTACHMENT</option>
+            <option value="MANUAL_REPORT">MANUAL_REPORT</option>
+          </select>
+          <input class="input" type="file" id="attFile" accept=".pdf,.doc,.docx"/>
+          <button class="btn-primary" style="width:100%;" onclick="window.__uploadAtt('${act.id}')">Upload</button>
+          <div id="attStatus" class="status" style="display:none;"></div>
+        </div>
+      `;
+    }
+
+    html += `<button class="btn-link" style="width:100%;" onclick="document.getElementById('detailModal').classList.remove('show')">Tutup</button>`;
+    el("detailContent").innerHTML = html;
+    openModal("detailModal");
+
+    // load attachments list
+    await refreshAttList(act.id, canAdminControl);
+  }
+
+  async function refreshAttList(activityId, canDelete){
+    const wrap = document.getElementById("attList");
+    if(!wrap) return;
+    const list = await KBJPS.attachments.listAttachmentsForUser(user);
+    const mine = list.filter(a=>a.activityId===activityId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+    if(!mine.length){
+      wrap.innerHTML = "Tiada dokumen.";
+      return;
+    }
+    wrap.innerHTML = mine.map(a => `
+      <div class="card" style="margin:8px 0;">
+        <div style="font-weight:900;">${a.title}</div>
+        <div class="small">${a.fileType} • ${a.createdAt} • oleh ${a.uploadedBy}</div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn-secondary" onclick="window.__downloadAtt('${a.id}')">Muat Turun</button>
+          ${canDelete && user.role!=="STAFF" ? `<button class="btn-secondary" onclick="window.__deleteAtt('${a.id}','${activityId}')">Padam</button>` : ``}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  async function openCreate(){
+    // preset dates
+    const y = current.getFullYear(), m = current.getMonth()+1;
+    const todayStr = `${y}-${String(m).padStart(2,'0')}-${String(new Date().getDate()).padStart(2,'0')}`;
+    el("aStartDate").value = todayStr;
+    el("aEndDate").value = todayStr;
+    el("aStartTime").value = "09:00";
+    el("aEndTime").value = "10:00";
+
+    // region/district
+    const regSel = el("aRegion");
+    const dstSel = el("aDistrict");
+
+    if (user.role === "ADMIN") {
+      document.getElementById("areaPick").style.display = "none";
+    } else {
+      document.getElementById("areaPick").style.display = "flex";
+      regSel.innerHTML = master.regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
+      const renderDst = () => {
+        const ds = master.districts.filter(d=>d.regionId===regSel.value);
+        dstSel.innerHTML = ds.map(d=>`<option value="${d.id}">${d.name}</option>`).join("");
+      };
+      regSel.addEventListener("change", renderDst);
+      renderDst();
+    }
+
+    // invite modes
+    const radios = Array.from(document.querySelectorAll("input[name='inviteMode']"));
+    const selectedWrap = el("selectedWrap");
+    const userSearch = el("userSearch");
+    const userList = el("userList");
+
+    function setMode() {
+      const mode = radios.find(r=>r.checked)?.value || "ALL";
+      selectedWrap.style.display = (mode==="SELECTED") ? "block" : "none";
+    }
+    radios.forEach(r=>r.addEventListener("change", setMode));
+    setMode();
+
+    // load users list (ALL SABAH ACTIVE)
+    const allUsers = (await KBJPS.users.getAllUsers()).filter(u=>u.status==="ACTIVE");
+    function renderUsers(filter=""){
+      const q = filter.trim().toLowerCase();
+      const shown = allUsers.filter(u => !q || (u.name||"").toLowerCase().includes(q) || (u.email||"").toLowerCase().includes(q));
+      userList.innerHTML = shown.map(u => `
+        <label class="small" style="display:block; padding:6px 4px;">
+          <input type="checkbox" value="${u.email}"/> ${u.name} <span class="badge">${u.role}</span>
+          <div class="small" style="opacity:.85;">${u.email}</div>
+        </label>
+      `).join("");
+    }
+    userSearch.addEventListener("input", () => renderUsers(userSearch.value));
+    renderUsers("");
+
+    // reset form status
+    const st = el("cStatus");
+    st.style.display="none";
+    openModal("createModal");
+  }
+
+  async function saveCreate(e){
+    e.preventDefault();
+    const st = el("cStatus");
+    st.style.display="block";
+    KBJPS.setStatus(st, "Memproses...", "info");
+
+    const mode = (document.querySelector("input[name='inviteMode']:checked")||{}).value || "ALL";
+    const selectedEmails = Array.from(document.querySelectorAll("#userList input[type='checkbox']:checked")).map(x=>x.value);
+
+    try{
+      await KBJPS.activities.addActivity(user, {
+        title: el("aTitle").value,
+        type: el("aType").value,
+        startDate: el("aStartDate").value,
+        endDate: el("aEndDate").value,
+        startTime: el("aStartTime").value,
+        endTime: el("aEndTime").value,
+        location: el("aLocation").value,
+        regionId: user.role==="ADMIN" ? user.regionId : el("aRegion").value,
+        districtId: user.role==="ADMIN" ? user.districtId : el("aDistrict").value,
+        inviteAll: mode==="ALL",
+        selectedEmails
+      });
+      KBJPS.setStatus(st, "Berjaya simpan & jemput peserta.", "ok");
+      setTimeout(() => { closeModal("createModal"); renderCalendar(); }, 300);
+    } catch(err){
+      KBJPS.setStatus(st, "Gagal: " + (err.message || err), "error");
+    }
+  }
+
+  async function acceptInv(activityId){
+    try{
+      await KBJPS.activities.respondInvitation(user, activityId, "ACCEPTED");
+      await renderCalendar();
+      await openActivityDetail(activityId);
+    }catch(e){
+      alert(e.message || e);
+    }
+  }
+
+  async function rejectInv(activityId){
+    const reason = prompt("Sebab tolak (wajib):");
+    if(reason===null) return;
+    try{
+      await KBJPS.activities.respondInvitation(user, activityId, "REJECTED", reason);
+      await renderCalendar();
+      await openActivityDetail(activityId);
+    }catch(e){
+      alert(e.message || e);
+    }
+  }
+
+  async function cancelAct(activityId){
+    const reason = prompt("Sebab batal (wajib):");
+    if(reason===null) return;
+    try{
+      await KBJPS.activities.cancelActivity(user, activityId, reason);
+      await renderCalendar();
+      await openActivityDetail(activityId);
+    }catch(e){
+      alert(e.message || e);
+    }
+  }
+
+  async function uploadAtt(activityId){
+    const st = document.getElementById("attStatus");
+    if(st){ st.style.display="block"; KBJPS.setStatus(st,"Memproses...","info"); }
+    try{
+      const file = document.getElementById("attFile").files[0];
+      if(!file) throw new Error("Sila pilih fail");
+      const title = document.getElementById("attTitle").value || file.name;
+      const notes = document.getElementById("attNotes").value || "";
+      const category = document.getElementById("attCat").value;
+      await KBJPS.attachments.uploadAttachment(user, activityId, file, { title, notes, category });
+      if(st) KBJPS.setStatus(st, "Upload berjaya.", "ok");
+      await refreshAttList(activityId, user.role!=="STAFF");
+      document.getElementById("attFile").value="";
+    }catch(e){
+      if(st) KBJPS.setStatus(st, "Gagal: " + (e.message || e), "error");
+    }
+  }
+
+  async function downloadAtt(attId){
+    const a = await KBJPS.attachments.getAttachmentById(attId);
+    if(!a) return;
+    const url = URL.createObjectURL(a.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = a.title + "." + a.fileType.toLowerCase();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  }
+
+  async function deleteAtt(attId, activityId){
+    if(!confirm("Padam dokumen ini?")) return;
+    try{
+      await KBJPS.attachments.deleteAttachment(user, attId);
+      await refreshAttList(activityId, true);
+    }catch(e){
+      alert(e.message || e);
+    }
+  }
+
+  // expose for inline onclick
+  window.__openAct = (id) => openActivityDetail(id);
+  window.__acceptInv = (id) => acceptInv(id);
+  window.__rejectInv = (id) => rejectInv(id);
+  window.__cancelAct = (id) => cancelAct(id);
+  window.__uploadAtt = (id) => uploadAtt(id);
+  window.__downloadAtt = (id) => downloadAtt(id);
+  window.__deleteAtt = (id, actId) => deleteAtt(id, actId);
+
+  document.addEventListener("DOMContentLoaded", async () => {
+    user = KBJPS.requireAuth();
+    if(!user) return;
+    master = await KBJPS.getMaster();
+
+    // create button
+    if(["SUPERADMIN","ADMIN"].includes(user.role)) el("btnCreate").style.display = "inline-block";
+    el("btnCreate").addEventListener("click", openCreate);
+
+    el("prevMonth").addEventListener("click", () => { current.setMonth(current.getMonth()-1); renderCalendar(); });
+    el("nextMonth").addEventListener("click", () => { current.setMonth(current.getMonth()+1); renderCalendar(); });
+    el("prevYear").addEventListener("click", () => { current.setFullYear(current.getFullYear()-1); renderCalendar(); });
+    el("nextYear").addEventListener("click", () => { current.setFullYear(current.getFullYear()+1); renderCalendar(); });
+
+    el("btnToday").addEventListener("click", () => { current = new Date(); renderCalendar(); });
+    el("btnRefresh").addEventListener("click", renderCalendar);
+
+    el("btnCloseCreate").addEventListener("click", () => closeModal("createModal"));
+    el("createForm").addEventListener("submit", saveCreate);
+
+    // close detail on outside click
+    el("detailModal").addEventListener("click", (e)=>{ if(e.target.id==="detailModal") closeModal("detailModal"); });
+    el("createModal").addEventListener("click", (e)=>{ if(e.target.id==="createModal") closeModal("createModal"); });
+
+    await renderCalendar();
+  });
+
+})();
+</script>
+
+</body>
+</html>

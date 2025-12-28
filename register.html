@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Daftar – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <img src="assets/logo-jps.png" class="logo" alt="Logo JPS"/>
+  <h2 class="neon-text-sm">Daftar STAFF (PENDING)</h2>
+  <form id="regForm">
+    <input class="input" id="name" placeholder="Nama penuh" required/>
+    <input class="input" type="email" id="email" placeholder="Email (unik)" required/>
+    <input class="input" id="phone" placeholder="Telefon" required/>
+    <input class="input" type="password" id="password" placeholder="Kata laluan (plaintext)" required/>
+
+    <select class="input" id="institusi" required></select>
+    <select class="input" id="regionId" required></select>
+    <select class="input" id="districtId" required></select>
+
+    <button class="btn-primary" type="submit" style="width:100%;">Hantar Pendaftaran</button>
+    <div id="status" class="status" style="display:none;"></div>
+  </form>
+
+  <button class="btn-secondary" style="width:100%; margin-top:10px;" onclick="location.href='index.html'">← Kembali Log Masuk</button>
+</div>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.auth.getLoggedInUser();
+  
+  await KBJPS.renderHeader({ title: "Daftar", backHref: "menu.html", showBack: false, showLogout: false });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const master = await KBJPS.getMaster();
+  const instSel = document.getElementById("institusi");
+  const regSel = document.getElementById("regionId");
+  const dstSel = document.getElementById("districtId");
+  const st = document.getElementById("status");
+  const show = (msg, type) => { st.style.display="block"; KBJPS.setStatus(st, msg, type); };
+
+  instSel.innerHTML = '<option value="">Pilih Institusi</option>' + (master.institutions||[]).map(i=>`<option value="${i.id}">${i.name}</option>`).join("");
+  regSel.innerHTML = '<option value="">Pilih Wilayah</option>' + (master.regions||[]).map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
+
+  function renderDistricts() {
+    const r = regSel.value;
+    const ds = (master.districts||[]).filter(d=>d.regionId===r);
+    dstSel.innerHTML = '<option value="">Pilih Daerah</option>' + ds.map(d=>`<option value="${d.id}">${d.name}</option>`).join("");
+  }
+  regSel.addEventListener("change", renderDistricts);
+  renderDistricts();
+
+  document.getElementById("regForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    show("Memproses pendaftaran...", "info");
+    try{
+      const u = await KBJPS.users.registerStaff({
+        name: document.getElementById("name").value,
+        email: document.getElementById("email").value,
+        phone: document.getElementById("phone").value,
+        password: document.getElementById("password").value,
+        institusi: instSel.value,
+        regionId: regSel.value,
+        districtId: dstSel.value
+      });
+      show("Berjaya! Akaun anda PENDING. Tunggu kelulusan SUPERADMIN.", "ok");
+      document.getElementById("regForm").reset();
+      renderDistricts();
+    } catch(err){
+      show("Gagal: " + (err.message || err), "error");
+    }
+  });
+});
+</script>
+
+</body>
+</html>

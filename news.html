@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Berita – KB‑JPS</title>
+  <link rel="icon" type="image/png" href="assets/logo-jps.png">
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/theme.css"/>
+  <script src="js/utils.js"></script>
+  
+</head>
+<body class="neon-bg">
+<div id="kbjpsHeader"></div>
+<div class="page">
+
+<div class="card glass">
+  <h2 class="neon-text-sm">Berita / Pengumuman</h2>
+  <div class="card">
+    <p class="small">
+      Halaman ini untuk pengumuman dalaman (offline). Anda boleh tambah pengumuman dalam versi seterusnya.
+    </p>
+    <div id="list" class="small"></div>
+  </div>
+</div>
+
+</div>
+<div id="kbjpsFooter"></div>
+<script>
+(async () => {
+  try { await KBJPS.ensureSeed(); } catch(e) {}
+  const user = KBJPS.requireAuth({});
+  if(!user) return;
+  await KBJPS.renderHeader({ title: "Berita", backHref: "menu.html", showBack: true, showLogout: true });
+  KBJPS.renderFooter();
+})();
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const user = KBJPS.requireAuth();
+  if(!user) return;
+
+  // Simple local announcements
+  const items = await KBJPS.news.list();
+  const el = document.getElementById("list");
+  if(!items.length){
+    el.innerHTML = "Tiada pengumuman.";
+    return;
+  }
+  el.innerHTML = items.map(n => `
+    <div class="card">
+      <div style="font-weight:900;">${n.title}</div>
+      <div class="small">${n.body}</div>
+      <div class="small">Tarikh: ${n.createdAt} (Waktu Malaysia)</div>
+    </div>
+  `).join("");
+});
+</script>
+
+</body>
+</html>
